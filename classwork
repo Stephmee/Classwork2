@@ -1,0 +1,123 @@
+-- 1. Създайте подходяща база данни и схема към нея;
+CREATE DATABASE IF NOT EXISTS STORK_CUSTOMER_ORDERS_JSON;
+-- 2. Създайте ФАЙЛ ФОРМАТ, подходящ за СТЕИДЖА
+CREATE FILE FORMAT IF NOT EXISTS JSON_FORMAT
+TYPE='JSON';
+-- 3. Създайте вътрешен СТЕИДЖ - добавете, коментар към стеиджа (проверете в документацията);
+CREATE SCHEMA IF NOT EXISTS STG_SCHEMA;
+
+CREATE STAGE IF NOT EXISTS INTERNAL_STAGE;
+
+COMMENT ON STAGE STORK_CUSTOMER_ORDERS_JSON.STG_SCHEMA.INTERNAL_STAGE IS 'INTERNAL STAGE FOR LOADING JSON DATA';
+
+-- 4. Качете JSON файловете.
+
+-- 5. Създайте подходящи таблици за суровите данни:
+-- - raw_customers_json
+-- - raw_orders_json
+
+CREATE TABLE IF NOT EXISTS raw_customers_json
+(
+    JSON_DATA VARIANT
+);
+
+DROP TABLE RAW_CUSTOMERS_JSON;
+
+CREATE TABLE IF NOT EXISTS raw_orders_json
+(
+    JSON_DATA VARIANT
+);
+
+DROP TABLE raw_orders_json;
+
+CREATE SCHEMA IF NOT EXISTS table_schema;
+use schema table_schema;
+
+-- 6. Създайте подходящи таблици за същинските данни:
+-- - td_customers
+-- - td_orders
+-- - td_order_items
+
+CREATE TABLE IF NOT EXISTS td_customers
+(
+    customer_id VARCHAR,
+    name VARCHAR,
+    email VARCHAR,
+    registration_date DATE,
+      street VARCHAR,
+      city VARCHAR,
+      zip_code NUMBER,
+    loyalty_points NUMBER
+);
+
+CREATE TABLE IF NOT EXISTS td_orders
+(
+    order_id VARCHAR,
+    customer_id VARCHAR,
+    order_date TIMESTAMP,
+    total_amount NUMBER,
+    items OBJECT,
+    shipping_method VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS td_order_items
+(
+   product_id VARCHAR,
+   name VARCHAR,
+   quantity NUMBER,
+   price NUMBER
+);
+
+-- 7. Заредете данните от JSON файловете - в таблиците за сурови данни
+COPY INTO STORK_CUSTOMER_ORDERS_JSON.TABLE_SCHEMA.RAW_CUSTOMERS_JSON
+FROM @STORK_CUSTOMER_ORDERS_JSON.STG_SCHEMA.INTERNAL_STAGE/customers_data.json
+FILE_FORMAT=
+(
+FORMAT_NAME=STORK_CUSTOMER_ORDERS_JSON.PUBLIC.JSON_FORMAT
+);
+
+COPY INTO STORK_CUSTOMER_ORDERS_JSON.TABLE_SCHEMA.raw_orders_json
+FROM @STORK_CUSTOMER_ORDERS_JSON.STG_SCHEMA.INTERNAL_STAGE/orders_data.json
+FILE_FORMAT=
+(
+FORMAT_NAME=STORK_CUSTOMER_ORDERS_JSON.PUBLIC.JSON_FORMAT
+);
+
+-- 8. Извлечете данните от суровите таблици и ги разпределете в td_* таблиците
+
+
+INSERT INTO td_customers( 
+ street,
+      city ,
+      zip_code ,
+customer_id,
+    email,
+    loyalty_points,
+    
+    name,
+    registration_date
+     )
+SELECT  
+JSON_DATA['address']['street']::String AS street,
+JSON_DATA['address']['city'] AS city,
+JSON_DATA['address']['zip_code']::Number AS zip_code,
+JSON_DATA['customer_id']::String AS ID,
+JSON_DATA['email']::String AS email,
+JSON_DATA['loyalty_points']::Number AS loyalty_points,
+JSON_DATA['name']::String AS Name,
+JSON_DATA['registration_date'] AS registration_date
+
+FROM STORK_CUSTOMER_ORDERS_JSON.TABLE_SCHEMA.raw_customers_json;
+
+SELECT * FROM td_customers;
+
+DROP TABLE td_customers;
+
+SELECT * FROM RAW_CUSTOMERS_JSON;
+
+
+-- 9. Създайте таблица, която да съдържа агрегирана информация от броя на потребителите, които са се регистрирали до момента в системата.
+
+-- 10. Създайте таблица, която да агрегира общото количество продадени продукти и тяхната цена.
+
+-- 11. Изтриите СУРОВИТЕ таблици.
